@@ -49,3 +49,5 @@ gi = gencode$getGeneID(1:10)
 chr = gencode$getValueByGeneID(gi, type = "chr")
 tr = gencode$getTranscriptsByGeneID(gi)
 ```
+
+For other gene annotation which is not from Gencode, users can use http://genomewiki.ucsc.edu/index.php/Genes_in_gtf_or_gff_format to generate files in GTF format (e.g. refGene.gtf)

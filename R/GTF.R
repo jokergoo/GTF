@@ -49,11 +49,11 @@ GTF$methods(initialize = function() {
 GTF$methods(show = function() {
 	"show method"
 	if(length(.self$gtf) == 0) {
-		qqcat("It contains nothing.\n")
+		qqcat("It contains nothing.\n", cat_prefix = "")
 	} else {
-		qqcat("It contains @{length(.self$gtf)} genes\n")
+		qqcat("It contains @{length(.self$gtf)} genes\n", cat_prefix = "")
 		if(.self$sorted) {
-			qqcat("Has been sorted.\n")
+			qqcat("Has been sorted.\n", cat_prefix = "")
 		}
 	}
 })

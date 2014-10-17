@@ -111,7 +111,7 @@ GTF$methods(sort = function() {
 })
 
 
-GTF$methods(toBed = function(file = NULL, type = c("gene", "exon"), chromosome = paste("chr", c(1:22, "X", "Y"), sep = "")) {
+GTF$methods(toBed = function(file = NULL, type = c("gene", "exon", "5UTR", "3UTR")) {
 	"convert and write to BED file"
 	type = match.arg(type)
 
@@ -125,7 +125,9 @@ GTF$methods(toBed = function(file = NULL, type = c("gene", "exon"), chromosome =
 
 	} else if(type == "exon") {
 
-		n_exon = sum(sapply(.self$gtf, function(x) length(x$transcript[[1]]$exon)))
+		n_exon = sum(sapply(.self$gtf, function(x) {
+			sum(sapply(x$transcript, function(tr) length(tr$exon)))
+		})
 		qqcat("totally @{n_exon} exons\n")
 		chr = character(n_exon)
 		start = integer(n_exon)
@@ -136,19 +138,17 @@ GTF$methods(toBed = function(file = NULL, type = c("gene", "exon"), chromosome =
 		gi = names(.self$gtf)
 		n = 0
 		for(i in seq_along(gi)) {
-			if(length(.self$gtf[[i]]$transcript) > 1) {
-				stop(qq("find more than one transcripts in @{gi[i]}, please merge your `gtf` first.\n"))
+			for(k in seq_along(.self$gtf[[i]]$transcript)) {
+				exon = .self$gtf[[i]]$transcript[[k]]$exon
+				l_exon = length(exon)
+				chr[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$chr, l_exon)
+				start[n + seq_len(l_exon)] = sapply(exon, function(x) x$start)
+				end[n + seq_len(l_exon)] = sapply(exon, function(x) x$end)
+				id[n + seq_len(l_exon)] = paste(gi[i], seq_along(exon), sep = "_")
+				strand[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$strand, l_exon)
+				n = n + l_exon
 			}
-
-			exon = .self$gtf[[i]]$transcript[[1]]$exon
-			l_exon = length(exon)
-			chr[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$chr, l_exon)
-			start[n + seq_len(l_exon)] = sapply(exon, function(x) x$start)
-			end[n + seq_len(l_exon)] = sapply(exon, function(x) x$end)
-			id[n + seq_len(l_exon)] = paste(gi[i], seq_along(exon), sep = "_")
-			strand[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$strand, l_exon)
-			n = n + l_exon
-
+			
 			if(i %% 500 == 0) {
 				qqcat("@{i}/@{length(gi)} genes finished\n")
 			}
@@ -156,21 +156,67 @@ GTF$methods(toBed = function(file = NULL, type = c("gene", "exon"), chromosome =
 
 		value = rep(0, length(id))
 		
-	} else {
-		stop("Currently only support 'gene' and 'exon'\n")
+	} else if(type %in% c("5UTR", "3UTR")) {
+
+		n_utr = sum(sapply(.self$gtf, function(x) {
+			length(x$transcript)
+		})
+		qqcat("totally @{n_utr} @{type}s\n")
+		chr = character(n_utr)
+		start = integer(n_utr)
+		end = integer(n_utr)
+		id = character(n_utr)
+		value = integer(n_utr)
+		strand = character(n_utr)
+		gi = names(.self$gtf)
+		n = 0
+		for(i in seq_along(gi)) {
+			for(k in seq_along(.self$gtf[[i]]$transcript)) {
+				transcript_start = .self$gtf[[i]]$transcript[[k]]$start
+				transcript_end = .self$gtf[[i]]$transcript[[k]]$end
+				
+				exon = .self$gtf[[i]]$transcript[[k]]$exon
+				exon_start = min(sapply(exon, function(x) x$start))
+				exon_end = max(sapply(exon, function(x) x$end))
+				
+				if(.self$gtf[[i]]$strand == "+") {
+					utr5_start = transcript_start
+					utr5_end = exon_start - 1
+					utr3_start = exon_end + 1
+					utr3_end = transcript_end
+				} else {
+					utr5_start = exon_end + 1
+					utr5_end = transcript_end
+					utr3_start = transcript_start
+					utr3_end = exon_start - 1
+				}
+				
+				chr[n + 1] = .self$gtf[[i]]$chr
+				if(type == "5UTR") {
+					start[n + 1] = utr5_start
+					end[n + 1] = utr5_end
+				} else {
+					start[n + 1] = utr3_start
+					end[n + 1] = utr3_end
+				}
+				id[n + 1] = gi[i]
+				strand[n + 1] = .self$gtf[[i]]$strand
+				n = n + 1
+			}
+			
+			if(i %% 500 == 0) {
+				qqcat("@{i}/@{length(gi)} genes finished\n")
+			}
+		}
+
+		value = rep(0, length(id))
+		
 	}
 
-	l = chr %in% chromosome
-	chr = chr[l]
-	start = start[l]
-	end = end[l]
-	id = id[l]
-	value = value[l]
-	strand = strand[l]
-	
 	start = as.integer(start)
 	end = as.integer(end)
 	df = data.frame(chr = chr, start = start, end = end, id = id, value = value, strand = strand)
+	df = subset(df, start <= end)
 	df = df[order.bed(df), ]
 	if(is.null(file)) {
 		return(df)

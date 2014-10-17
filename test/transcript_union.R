@@ -35,3 +35,5 @@ write.table(df, file = "gencode/gencode_gene_length.txt", row.names = FALSE, col
 # gene.bed and exon.bed are already sorted by chr and start positions
 gencode$toBed(file = "bed/gene.bed", type = "gene")
 gencode$toBed(file = "bed/exon.bed", type = "exon")
+gencode$toBed(type = "5UTR")
+gencode$toBed(type = "3UTR")

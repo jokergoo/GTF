@@ -312,6 +312,19 @@ GTF$methods(getTranscriptsByGeneID = function(geneID) {
 	.self$gtf[geneID]
 })
 
+GTF$methods(subset = function(geneID, copy = TRUE) {
+	"subset"
+	if(copy) {
+		new_gtf = .self$copy()
+		new_gtf$gtf = new_gtf$gtf[geneID]
+		new_gtf$sorted = FALSE
+		return(new_gtf)
+	} else {
+		.self$gtf = .self$gtf[geneID]
+		.self$sorted = FALSE
+		return(.self)
+	}
+})
 
 # private method
 sort_by_start = function(x) {

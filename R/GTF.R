@@ -127,7 +127,7 @@ GTF$methods(toBed = function(file = NULL, type = c("gene", "exon", "5UTR", "3UTR
 
 		n_exon = sum(sapply(.self$gtf, function(x) {
 			sum(sapply(x$transcript, function(tr) length(tr$exon)))
-		})
+		}))
 		qqcat("totally @{n_exon} exons\n")
 		chr = character(n_exon)
 		start = integer(n_exon)
@@ -160,7 +160,7 @@ GTF$methods(toBed = function(file = NULL, type = c("gene", "exon", "5UTR", "3UTR
 
 		n_utr = sum(sapply(.self$gtf, function(x) {
 			length(x$transcript)
-		})
+		}))
 		qqcat("totally @{n_utr} @{type}s\n")
 		chr = character(n_utr)
 		start = integer(n_utr)

@@ -33,6 +33,8 @@
 #' gi = gencode$getGeneID(1:10)
 #' chr = gencode$getValueByGeneID(gi, type = "chr")
 #' tr = gencode$getTranscriptsByGeneID(gi)
+#' gencode_subset = gencode$subset(1:10)
+#' gencode_subset = gencode$subset(gi[1:5])
 #' }
 GTF = setRefClass("GTF",
 	fields = list(
@@ -312,15 +314,15 @@ GTF$methods(getTranscriptsByGeneID = function(geneID) {
 	.self$gtf[geneID]
 })
 
-GTF$methods(subset = function(geneID, copy = TRUE) {
+GTF$methods(subset = function(index, copy = TRUE) {
 	"subset"
 	if(copy) {
 		new_gtf = .self$copy()
-		new_gtf$gtf = new_gtf$gtf[geneID]
+		new_gtf$gtf = new_gtf$gtf[index]
 		new_gtf$sorted = FALSE
 		return(new_gtf)
 	} else {
-		.self$gtf = .self$gtf[geneID]
+		.self$gtf = .self$gtf[index]
 		.self$sorted = FALSE
 		return(.self)
 	}

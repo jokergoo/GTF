@@ -33,6 +33,9 @@
 #' gi = gencode$getGeneID(1:10)
 #' chr = gencode$getValueByGeneID(gi, type = "chr")
 #' tr = gencode$getTranscriptsByGeneID(gi)
+#' gencode_subset = gencode$subset(1:10)
+#' gencode_subset = gencode$subset(gi[1:5])
+#' gencode$subset(1:10, copy = FALSE)
 #' }
 GTF = setRefClass("GTF",
 	fields = list(
@@ -166,6 +169,7 @@ GTF$methods(toBed = function(file = NULL, category = c("gene", "exon", "transcri
 		n_tss = sum(sapply(.self$gtf, function(x) {
 			length(x$transcript)
 		}))
+
 		qqcat("totally @{n_tss} @{category}s\n")
 		chr = character(n_tss)
 		start = integer(n_tss)
@@ -238,6 +242,9 @@ GTF$methods(toBed = function(file = NULL, category = c("gene", "exon", "transcri
 		df = subset(df, type %in% gene_type)
 	}
 	df = df[order.bed(df), ]
+
+	rownames(df) = NULL
+
 	if(is.null(file)) {
 		return(df)
 	} else {
@@ -332,6 +339,19 @@ GTF$methods(getTranscriptsByGeneID = function(geneID) {
 	.self$gtf[geneID]
 })
 
+GTF$methods(subset = function(index, copy = TRUE) {
+	"subset"
+	if(copy) {
+		new_gtf = .self$copy()
+		new_gtf$gtf = new_gtf$gtf[index]
+		new_gtf$sorted = FALSE
+		return(new_gtf)
+	} else {
+		.self$gtf = .self$gtf[index]
+		.self$sorted = FALSE
+		return(.self)
+	}
+})
 
 # private method
 sort_by_start = function(x) {

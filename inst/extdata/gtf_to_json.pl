@@ -62,6 +62,7 @@ sub read_gtf {
 		my $gene_name = $tmp[8] =~/gene_name "(.*?)"/ ? $1 : $gene_id;
 		my $gene_type = $tmp[8] =~/gene_type "(.*?)"/ ? $1 : "Unknown";
 		
+		# the new entry of a 'gene' is not defined by 'gene' column but by the description column
 		if(!defined($gtf->{$gene_id})) {
 		
 			$gtf->{$gene_id} = {strand => $strand,

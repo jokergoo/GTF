@@ -26,10 +26,10 @@
 #' gencode$mergeTranscripts(mc.cores = 2)
 #' gencode$write("output.gtf")
 #' gene_length = gencode$geneLength("exon")
-#' gene = gencode$toBed(type = "gene")
-#' exon = gencode$toBed(type = "exon")
-#' gencode$toBed(file = "gene.bed", type = "gene")
-#' gencode$toBed(file = "exon.bed", type = "exon")
+#' gene = gencode$toBed(category = "gene")
+#' exon = gencode$toBed(category = "exon")
+#' gencode$toBed(file = "gene.bed", category = "gene")
+#' gencode$toBed(file = "exon.bed", category = "exon")
 #' gi = gencode$getGeneID(1:10)
 #' chr = gencode$getValueByGeneID(gi, type = "chr")
 #' tr = gencode$getTranscriptsByGeneID(gi)
@@ -111,23 +111,26 @@ GTF$methods(sort = function() {
 })
 
 
-GTF$methods(toBed = function(file = NULL, type = c("gene", "exon", "5UTR", "3UTR")) {
-	"convert and write to BED file"
-	type = match.arg(type)
+GTF$methods(toBed = function(file = NULL, category = c("gene", "exon", "transcript", "tss", "upstream", "downstream"), 
+	extend = 2000, type = NULL) {
+	"convert and write to BED file. If gtf is merged, or if gtf is not merged and category == 'gene', possible values for 'type' should be in 'pseudogene', 'lincRNA', 'protein_coding', 'antisense', 'processed_transcript', 'snRNA', 'sense_intronic', 'miRNA', 'misc_RNA', 'snoRNA', 'rRNA', 'polymorphic_pseudogene', 'sense_overlapping', '3prime_overlapping_ncrna', 'IG_V_gene', 'IG_C_gene', 'IG_J_gene', 'IG_V_pseudogene', 'TR_C_gene', 'TR_J_gene', 'TR_V_gene', 'TR_V_pseudogene', 'IG_C_pseudogene', 'TR_D_gene', 'TR_J_pseudogene', 'IG_J_pseudogene', 'IG_D_gene', 'Mt_tRNA', 'Mt_rRNA', if 'gtf' is not merged, and 'category' is not equal to `gene`, possible values for type should be in 'processed_transcript', 'unprocessed_pseudogene', 'transcribed_unprocessed_pseudogene', 'lincRNA', 'protein_coding', 'processed_pseudogene', 'antisense', 'snRNA', 'pseudogene', 'retained_intron', 'nonsense_mediated_decay', 'sense_intronic', 'miRNA', 'misc_RNA', 'transcribed_processed_pseudogene', 'snoRNA', 'non_stop_decay', 'rRNA', 'unitary_pseudogene', 'polymorphic_pseudogene', 'sense_overlapping', 'TEC', '3prime_overlapping_ncrna', 'IG_V_gene', 'IG_C_gene', 'IG_J_gene', 'IG_V_pseudogene', 'TR_C_gene', 'TR_J_gene', 'TR_V_gene', 'TR_V_pseudogene', 'IG_C_pseudogene', 'TR_D_gene', 'TR_J_pseudogene', 'IG_J_pseudogene', 'IG_D_gene', 'Mt_tRNA', 'Mt_rRNA'"
+	
+	category = match.arg(category)
 
-	if(type == "gene") {
+	if(category == "gene") {
 		chr = sapply(.self$gtf, function(x) x$chr)
 		start = sapply(.self$gtf, function(x) x$start)
 		end = sapply(.self$gtf, function(x) x$end)
 		id = names(.self$gtf)
 		value = rep(0, length(id))
 		strand = sapply(.self$gtf, function(x) x$strand)
+		gt = sapply(.self$gtf, function(x) x$type)
 
-	} else if(type == "exon") {
+	} else if(category == "exon") {
 
 		n_exon = sum(sapply(.self$gtf, function(x) {
 			sum(sapply(x$transcript, function(tr) length(tr$exon)))
-		})
+		}))
 		qqcat("totally @{n_exon} exons\n")
 		chr = character(n_exon)
 		start = integer(n_exon)
@@ -135,6 +138,7 @@ GTF$methods(toBed = function(file = NULL, type = c("gene", "exon", "5UTR", "3UTR
 		id = character(n_exon)
 		value = integer(n_exon)
 		strand = character(n_exon)
+		gt = character(n_exon)
 		gi = names(.self$gtf)
 		n = 0
 		for(i in seq_along(gi)) {
@@ -144,8 +148,9 @@ GTF$methods(toBed = function(file = NULL, type = c("gene", "exon", "5UTR", "3UTR
 				chr[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$chr, l_exon)
 				start[n + seq_len(l_exon)] = sapply(exon, function(x) x$start)
 				end[n + seq_len(l_exon)] = sapply(exon, function(x) x$end)
-				id[n + seq_len(l_exon)] = paste(gi[i], seq_along(exon), sep = "_")
+				id[n + seq_len(l_exon)] = paste(gi[i], k, seq_along(exon), sep = "_")
 				strand[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$strand, l_exon)
+				gt[n+seq_len(l_exon)] = rep(.self$gtf[[i]]$type, l_exon)
 				n = n + l_exon
 			}
 			
@@ -156,18 +161,19 @@ GTF$methods(toBed = function(file = NULL, type = c("gene", "exon", "5UTR", "3UTR
 
 		value = rep(0, length(id))
 		
-	} else if(type %in% c("5UTR", "3UTR")) {
+	} else if(category %in% c("transcript", "tss", "upstream", "downstream")) {
 
-		n_utr = sum(sapply(.self$gtf, function(x) {
+		n_tss = sum(sapply(.self$gtf, function(x) {
 			length(x$transcript)
-		})
-		qqcat("totally @{n_utr} @{type}s\n")
-		chr = character(n_utr)
-		start = integer(n_utr)
-		end = integer(n_utr)
-		id = character(n_utr)
-		value = integer(n_utr)
-		strand = character(n_utr)
+		}))
+		qqcat("totally @{n_tss} @{category}s\n")
+		chr = character(n_tss)
+		start = integer(n_tss)
+		end = integer(n_tss)
+		id = character(n_tss)
+		value = integer(n_tss)
+		strand = character(n_tss)
+		gt = character(n_tss)
 		gi = names(.self$gtf)
 		n = 0
 		for(i in seq_along(gi)) {
@@ -175,48 +181,62 @@ GTF$methods(toBed = function(file = NULL, type = c("gene", "exon", "5UTR", "3UTR
 				transcript_start = .self$gtf[[i]]$transcript[[k]]$start
 				transcript_end = .self$gtf[[i]]$transcript[[k]]$end
 				
-				exon = .self$gtf[[i]]$transcript[[k]]$exon
-				exon_start = min(sapply(exon, function(x) x$start))
-				exon_end = max(sapply(exon, function(x) x$end))
-				
 				if(.self$gtf[[i]]$strand == "+") {
-					utr5_start = transcript_start
-					utr5_end = exon_start - 1
-					utr3_start = exon_end + 1
-					utr3_end = transcript_end
+					if(category == "tss") {
+						pos_start = transcript_start
+						pos_end = transcript_start
+					} else if(category == "upstream") {
+						pos_start = transcript_start - 1 - extend + 1
+						pos_end = transcript_start - 1
+					} else if(category == "downstream") {
+						pos_start = transcript_end + 1
+						pos_end = transcript_end + 1 + extend - 1
+					} else {
+						pos_start = transcript_start
+						pos_end = transcript_end
+					}
 				} else {
-					utr5_start = exon_end + 1
-					utr5_end = transcript_end
-					utr3_start = transcript_start
-					utr3_end = exon_start - 1
+					if(category == "tss") {
+						pos_start = transcript_end
+						pos_end = transcript_end
+					} else if(category == "upstream") {
+						pos_start = transcript_end + 1
+						pos_end = transcript_end + 1 + extend - 1
+					} else if(category == "downstream") {
+						pos_start = transcript_start - 1 - extend + 1
+						pos_end = transcript_start - 1
+					} else {
+						pos_start = transcript_start
+						pos_end = transcript_end
+					}
 				}
-				
 				chr[n + 1] = .self$gtf[[i]]$chr
-				if(type == "5UTR") {
-					start[n + 1] = utr5_start
-					end[n + 1] = utr5_end
-				} else {
-					start[n + 1] = utr3_start
-					end[n + 1] = utr3_end
-				}
-				id[n + 1] = gi[i]
+				start[n + 1] = pos_start
+				end[n + 1] = pos_end
+				id[n + 1] = paste(gi[i], k, sep = "_")
 				strand[n + 1] = .self$gtf[[i]]$strand
+				gt[n + 1] = .self$gtf[[i]]$type
 				n = n + 1
 			}
 			
 			if(i %% 500 == 0) {
-				qqcat("@{i}/@{length(gi)} genes finished\n")
+				qqcat("\r")
+				qqcat("@{i}/@{length(gi)} genes finished           \n")
+				flush.console()
 			}
 		}
 
 		value = rep(0, length(id))
 		
-	}
+	} 
 
 	start = as.integer(start)
 	end = as.integer(end)
-	df = data.frame(chr = chr, start = start, end = end, id = id, value = value, strand = strand)
+	df = data.frame(chr = chr, start = start, end = end, name = id, value = value, strand = strand, type = gt, stringsAsFactors = FALSE)
 	df = subset(df, start <= end)
+	if(!is.null(type)) {
+		df = subset(df, type %in% gene_type)
+	}
 	df = df[order.bed(df), ]
 	if(is.null(file)) {
 		return(df)

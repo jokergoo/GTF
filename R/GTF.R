@@ -40,12 +40,14 @@
 GTF = setRefClass("GTF",
 	fields = list(
 		gtf = "list",
-		sorted  = "logical")
+		sorted  = "logical",
+		merged = "logical")
 )
 
 GTF$methods(initialize = function() {
 	gtf <<- vector("list", length = 0)
 	sorted <<- FALSE
+	merged <<- FALSE
 })
 
 # common methods
@@ -145,13 +147,14 @@ GTF$methods(toBed = function(file = NULL, category = c("gene", "exon", "transcri
 		gi = names(.self$gtf)
 		n = 0
 		for(i in seq_along(gi)) {
+			ti = names(.self$gtf[[i]]$transcript)
 			for(k in seq_along(.self$gtf[[i]]$transcript)) {
 				exon = .self$gtf[[i]]$transcript[[k]]$exon
 				l_exon = length(exon)
 				chr[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$chr, l_exon)
 				start[n + seq_len(l_exon)] = sapply(exon, function(x) x$start)
 				end[n + seq_len(l_exon)] = sapply(exon, function(x) x$end)
-				id[n + seq_len(l_exon)] = paste(gi[i], k, seq_along(exon), sep = "_")
+				id[n + seq_len(l_exon)] = paste(ti[i], k, seq_along(exon), sep = "_")
 				strand[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$strand, l_exon)
 				gt[n+seq_len(l_exon)] = rep(.self$gtf[[i]]$type, l_exon)
 				n = n + l_exon
@@ -217,7 +220,11 @@ GTF$methods(toBed = function(file = NULL, category = c("gene", "exon", "transcri
 				chr[n + 1] = .self$gtf[[i]]$chr
 				start[n + 1] = pos_start
 				end[n + 1] = pos_end
-				id[n + 1] = paste(gi[i], k, sep = "_")
+				if(.self$merged) {
+					id[n + 1] = gi[i]
+				} else {
+					id[n + 1] = paste(gi[i], k, sep = "_")
+				}
 				strand[n + 1] = .self$gtf[[i]]$strand
 				gt[n + 1] = .self$gtf[[i]]$type
 				n = n + 1
@@ -263,6 +270,7 @@ GTF$methods(mergeTranscripts = function(mc.cores = 1) {
 	gtf <<- gcd
 	
 	.self$sort()
+	merged <<- TRUE
 	
 	return(invisible(.self))
 })
@@ -370,6 +378,7 @@ sort_chr = function(x) {
 	x[order(y)]
 }
 
+# the name for transcript will be named `gn`
 union_transcript = function(gene, gn = NULL) {
 	
 	if(length(gene$transcript) == 1) return(gene)

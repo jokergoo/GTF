@@ -381,7 +381,12 @@ sort_chr = function(x) {
 # the name for transcript will be named `gn`
 union_transcript = function(gene, gn = NULL) {
 	
-	if(length(gene$transcript) == 1) return(gene)
+	if(length(gene$transcript) == 1) {
+		if(!is.null(gn)) {
+			names(gene$transcript) = gn
+		}
+		return(gene)
+	}
 	
 	exon = gene$transcript[[1]]$exon
 	start = sapply(exon, function(x) x$start)

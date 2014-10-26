@@ -184,6 +184,7 @@ GTF$methods(toBed = function(file = NULL, category = c("gene", "exon", "transcri
 		gi = names(.self$gtf)
 		n = 0
 		for(i in seq_along(gi)) {
+			ti = names(.self$gtf[[i]]$transcript)
 			for(k in seq_along(.self$gtf[[i]]$transcript)) {
 				transcript_start = .self$gtf[[i]]$transcript[[k]]$start
 				transcript_end = .self$gtf[[i]]$transcript[[k]]$end
@@ -220,11 +221,7 @@ GTF$methods(toBed = function(file = NULL, category = c("gene", "exon", "transcri
 				chr[n + 1] = .self$gtf[[i]]$chr
 				start[n + 1] = pos_start
 				end[n + 1] = pos_end
-				if(.self$merged) {
-					id[n + 1] = gi[i]
-				} else {
-					id[n + 1] = paste(gi[i], k, sep = "_")
-				}
+				id[n + 1] = ti[k]
 				strand[n + 1] = .self$gtf[[i]]$strand
 				gt[n + 1] = .self$gtf[[i]]$type
 				n = n + 1

@@ -239,7 +239,7 @@ GTF$methods(toBed = function(file = NULL, category = c("gene", "exon", "transcri
 	df = data.frame(chr = chr, start = start, end = end, name = id, value = value, strand = strand, type = gt, stringsAsFactors = FALSE)
 	df = subset(df, start <= end)
 	if(!is.null(type)) {
-		df = subset(df, type %in% gene_type)
+		df = subset(df, type %in% type)
 	}
 	df = df[order.bed(df), ]
 

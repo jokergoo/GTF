@@ -37,3 +37,8 @@ gencode$toBed(file = "bed/gene.bed", type = "gene")
 gencode$toBed(file = "bed/exon.bed", type = "exon")
 gencode$toBed(type = "5UTR")
 gencode$toBed(type = "3UTR")
+
+
+##############################################################
+library(GenomicFeatures)
+txdb = makeTranscriptDbFromGFF("/icgc/dkfzlsdf/analysis/B080/guz/gencode/gencode.v17.annotation.gtf")

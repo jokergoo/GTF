@@ -60,10 +60,14 @@ GTF$methods(show = function() {
 		if(.self$sorted) {
 			qqcat("Has been sorted.\n", cat_prefix = "")
 		}
+		if(.self$merged) {
+			qqcat("Has been merged.\n", cat_prefix = "")
+		}
 	}
 })
 
-GTF$methods(read = function(gtf) {
+#
+GTF$methods(read = function(gtf, gene_fields = c(), transcript_fields = c()) {
 	"read from GTF file"
 	
 	perlScript = qq("@{system.file(package = 'GTF')}/extdata/gtf_to_json.pl")

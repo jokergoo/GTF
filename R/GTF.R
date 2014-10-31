@@ -128,6 +128,11 @@ GTF$methods(availableTypes = function(type = c("gene", "transcript")) {
 })
 
 GTF$methods(genes = function(type = NULL) {
+	
+	if(!.self$sorted) {
+		stop("GTF should be sorted.\n")
+	}
+
 	chr = sapply(.self$gtf, function(x) x$chr)
 	start = sapply(.self$gtf, function(x) x$start)
 	end = sapply(.self$gtf, function(x) x$end)
@@ -151,6 +156,11 @@ GTF$methods(genes = function(type = NULL) {
 })
 
 GTF$methods(transcripts = function(type = NULL) {
+
+	if(!.self$sorted) {
+		stop("GTF should be sorted.\n")
+	}
+	
 	n_tx = sum(sapply(.self$gtf, function(x) {
 		length(x$transcript)
 	}))
@@ -167,23 +177,25 @@ GTF$methods(transcripts = function(type = NULL) {
 	
 	all_gi = names(.self$gtf)
 	all_gn = sapply(.self$gtf, function(x) x$name)
+	n = 0
 	for(i in seq_along(all_gi)) {
 		tx = .self$gtf[[i]]$transcript
 		if(!is.null(type)) {
 			l = sapply(tx, function(x) x$tpye) %in% type
 			tx = tx[l]
 		}
-		k = length(ti)
+		k = length(tx)
 		
 		chr[n + seq_len(k)] = rep(.self$gtf[[i]]$chr, k)
-		start[n + seq_len(k)] = sapply(ti, function(x) x$start)
-		end[n + seq_len(k)] = sapply(ti, function(x) x$end)
-		id[n + seq_len(k)] = names(ti)
+		start[n + seq_len(k)] = sapply(tx, function(x) x$start)
+		end[n + seq_len(k)] = sapply(tx, function(x) x$end)
+		id[n + seq_len(k)] = names(tx)
 		strand[n + seq_len(k)] = rep(.self$gtf[[i]]$strand, k)
-		tt[n + seq_len(k)] = sapply(ti, function(x) x$type)
+		tt[n + seq_len(k)] = sapply(tx, function(x) x$type)
 		gi[n + seq_len(k)] = rep(all_gi[i], k)
 		gn[m + seq_len(k)] = rep(all_gn[i], k]
-			
+		
+		n = n + k
 	}
 	
 	gr = GRanges(seqnames = Rle(chr),
@@ -191,12 +203,65 @@ GTF$methods(transcripts = function(type = NULL) {
 			                 end = end),
 			strand = Rle(strand),
 			mcols = DataFrame(score = value, id = id, type = tt, gene_name = gn, gene_id = gi))
-	names(gr) = ti
+	names(gr) = id
 	return(gr)
 })
 
 GTF$methods(exons = function() {
 
+	if(!.self$sorted) {
+		stop("GTF should be sorted.\n")
+	}
+	
+	n_exon = sum(sapply(.self$gtf, function(x) {
+		sum(sapply(x$transcript, function(tr) length(tr$exon)))
+	}))
+		
+	chr = character(n_exon)
+	start = integer(n_exon)
+	end = integer(n_exon)
+	id = character(n_exon)
+	value = integer(n_exon)
+	strand = character(n_exon)
+	
+	gi = character(n_tx)
+	gn = character(n_tx)
+	
+	all_gi = names(.self$gtf)
+	all_gn = sapply(.self$gtf, function(x) x$name)
+	
+	n = 0
+	for(i in seq_along(all_gi)) {
+		tx = .self$gtf[[i]]$transcript
+		ti = names(tx)
+		
+		for(k in seq_along(tx)) {
+			exon = tx[[k]]$exon
+			l_exon = length(exon)
+			chr[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$chr, l_exon)
+			start[n + seq_len(l_exon)] = sapply(exon, function(x) x$start)
+			end[n + seq_len(l_exon)] = sapply(exon, function(x) x$end)
+			if(.self$gtf[[i]]$strand == "+") {
+				id[n + seq_len(l_exon)] = paste(ti[i], k, seq_along(exon), sep = "_")
+			} else {
+				id[n + seq_len(l_exon)] = paste(ti[i], k, rev(seq_along(exon)), sep = "_")
+			}
+			strand[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$strand, l_exon)
+			tt[n+seq_len(l_exon)] = rep(tx$type, l_exon)
+			gi[n+seq_len(l_exon)] = rep(all_gi[i], l_exon)
+			gn[n+seq_len(l_exon)] = rep(all_gn[i], l_exon)
+			
+			n = n + l_exon
+		}
+	}
+	
+	gr = GRanges(seqnames = Rle(chr),
+	        ranges = IRanges(start = start,
+			                 end = end),
+			strand = Rle(strand),
+			mcols = DataFrame(score = value, id = id, type = tt, gene_name = gn, gene_id = gi))
+	names(gr) = id
+	return(gr)
 })
 
 GTF$methods(introns = function() {
@@ -209,7 +274,8 @@ GTF$methods(threeUTRs = function() {
 
 GTF$methods(fiveUTRs = funcitons() {
 
-}_
+})
+
 
 
 GTF$methods(toBed = function(file = NULL, category = c("gene", "exon", "transcript", "tss", "upstream", "downstream"), 

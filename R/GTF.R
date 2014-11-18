@@ -60,17 +60,26 @@ GTF$methods(show = function() {
 		if(.self$sorted) {
 			qqcat("Has been sorted.\n", cat_prefix = "")
 		}
+		if(.self$merged) {
+			qqcat("Has been merged.\n", cat_prefix = "")
+		}
 	}
 })
 
 GTF$methods(read = function(gtf) {
 	"read from GTF file"
 	
-	perlScript = qq("@{system.file(package = 'GTF')}/extdata/gtf_to_json.pl")
-	cmd = qq("perl \"@{perlScript}\" \"@{normalizePath(gtf)}\"")
-	p = pipe(cmd)
-	gtf <<- fromJSON(file = p)
-	close(p)
+	#perlScript = qq("@{system.file(package = 'GTF')}/extdata/gtf_to_json.pl")
+	perlScript = "D:\\personal_project\\GTF\\inst\\extdata\\gtf_to_json.pl"
+	tmp = tempfile()
+	cmd = qq("perl \"@{perlScript}\" --input \"@{normalizePath(gtf)}\" --output \"@{tmp}\"")
+	error = try(system(cmd))
+	if(class(error) == "try-error") {
+		file.remove(tmp)
+		stop(error, appendLF = FALSE)
+	}
+	gtf <<- fromJSON(file = tmp)
+	file.remove(tmp)
 	.self$sort()
 	
 	return(invisible(.self))
@@ -116,6 +125,7 @@ GTF$methods(sort = function() {
 })
 
 GTF$methods(availableTypes = function(type = c("gene", "transcript")) {
+	type = match.arg(type)[1]
 	if(type == "gene") {
 		unique(sapply(.self$gtf, function(x) x$type))
 	} else {
@@ -125,24 +135,21 @@ GTF$methods(availableTypes = function(type = c("gene", "transcript")) {
 
 GTF$methods(genes = function(type = NULL) {
 	
-	if(!.self$sorted) {
-		stop("GTF should be sorted.\n")
-	}
-
 	chr = sapply(.self$gtf, function(x) x$chr)
 	start = sapply(.self$gtf, function(x) x$start)
 	end = sapply(.self$gtf, function(x) x$end)
-	id = names(.self$gtf)
-	value = rep(0, length(id))
-	gn = sapply(.self$gtf, function(x) x$name)
+	gene_id = names(.self$gtf)
+	gene_name = sapply(.self$gtf, function(x) x$name)
 	strand = sapply(.self$gtf, function(x) x$strand)
-	gt = sapply(.self$gtf, function(x) x$type)
+	gene_type = sapply(.self$gtf, function(x) x$type)
 	gr = GRanges(seqnames = Rle(chr),
 	        ranges = IRanges(start = start,
 			                 end = end),
 			strand = Rle(strand),
-			mcols = DataFrame(score = value, id = id, type = gt, gene_name = name))
-	names(gr) = gi
+			gene_id = gene_id, 
+			gene_type = gene_type, 
+			gene_name = gene_name)
+	names(gr) = gene_id
 	
 	if(!is.null(type)) {
 		l = gt %in% type
@@ -153,10 +160,6 @@ GTF$methods(genes = function(type = NULL) {
 
 GTF$methods(transcripts = function(type = NULL) {
 
-	if(!.self$sorted) {
-		stop("GTF should be sorted.\n")
-	}
-	
 	n_tx = sum(sapply(.self$gtf, function(x) {
 		length(x$transcript)
 	}))
@@ -177,7 +180,7 @@ GTF$methods(transcripts = function(type = NULL) {
 	for(i in seq_along(all_gi)) {
 		tx = .self$gtf[[i]]$transcript
 		if(!is.null(type)) {
-			l = sapply(tx, function(x) x$tpye) %in% type
+			l = sapply(tx, function(x) x$type) %in% type
 			tx = tx[l]
 		}
 		k = length(tx)
@@ -189,7 +192,7 @@ GTF$methods(transcripts = function(type = NULL) {
 		strand[n + seq_len(k)] = rep(.self$gtf[[i]]$strand, k)
 		tt[n + seq_len(k)] = sapply(tx, function(x) x$type)
 		gi[n + seq_len(k)] = rep(all_gi[i], k)
-		gn[m + seq_len(k)] = rep(all_gn[i], k]
+		gn[n + seq_len(k)] = rep(all_gn[i], k)
 		
 		n = n + k
 	}
@@ -198,16 +201,19 @@ GTF$methods(transcripts = function(type = NULL) {
 	        ranges = IRanges(start = start,
 			                 end = end),
 			strand = Rle(strand),
-			mcols = DataFrame(score = value, id = id, type = tt, gene_name = gn, gene_id = gi))
+			transcript_id = id, 
+			transcript_type = tt, 
+			gene_id = gi,
+			gene_name = gn)
 	names(gr) = id
 	return(gr)
 })
 
 GTF$methods(exons = function() {
-
-	if(!.self$sorted) {
-		stop("GTF should be sorted.\n")
-	}
+	
+	n_tx = sum(sapply(.self$gtf, function(x) {
+		length(x$transcript)
+	}))
 	
 	n_exon = sum(sapply(.self$gtf, function(x) {
 		sum(sapply(x$transcript, function(tr) length(tr$exon)))
@@ -220,8 +226,11 @@ GTF$methods(exons = function() {
 	value = integer(n_exon)
 	strand = character(n_exon)
 	
-	gi = character(n_tx)
-	gn = character(n_tx)
+	gi = character(n_exon)
+	gn = character(n_exon)
+	
+	ti = character(n_exon)
+	tt = character(n_exon)
 	
 	all_gi = names(.self$gtf)
 	all_gn = sapply(.self$gtf, function(x) x$name)
@@ -229,25 +238,28 @@ GTF$methods(exons = function() {
 	n = 0
 	for(i in seq_along(all_gi)) {
 		tx = .self$gtf[[i]]$transcript
-		ti = names(tx)
+		tii = names(tx)
 		
 		for(k in seq_along(tx)) {
 			exon = tx[[k]]$exon
 			l_exon = length(exon)
-			chr[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$chr, l_exon)
-			start[n + seq_len(l_exon)] = sapply(exon, function(x) x$start)
-			end[n + seq_len(l_exon)] = sapply(exon, function(x) x$end)
-			if(.self$gtf[[i]]$strand == "+") {
-				id[n + seq_len(l_exon)] = paste(ti[i], k, seq_along(exon), sep = "_")
-			} else {
-				id[n + seq_len(l_exon)] = paste(ti[i], k, rev(seq_along(exon)), sep = "_")
+			if(l_exon) {
+				chr[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$chr, l_exon)
+				start[n + seq_len(l_exon)] = sapply(exon, function(x) x$start)
+				end[n + seq_len(l_exon)] = sapply(exon, function(x) x$end)
+				if(.self$gtf[[i]]$strand == "+") {
+					id[n + seq_len(l_exon)] = paste(tii[k], k, seq_along(exon), sep = "_")
+				} else {
+					id[n + seq_len(l_exon)] = paste(tii[k], k, rev(seq_along(exon)), sep = "_")
+				}
+				strand[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$strand, l_exon)
+				ti[n+seq_len(l_exon)] = rep(tii[k], l_exon)
+				tt[n+seq_len(l_exon)] = rep(tx[[k]]$type, l_exon)
+				gi[n+seq_len(l_exon)] = rep(all_gi[i], l_exon)
+				gn[n+seq_len(l_exon)] = rep(all_gn[i], l_exon)
+				
+				n = n + l_exon
 			}
-			strand[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$strand, l_exon)
-			tt[n+seq_len(l_exon)] = rep(tx$type, l_exon)
-			gi[n+seq_len(l_exon)] = rep(all_gi[i], l_exon)
-			gn[n+seq_len(l_exon)] = rep(all_gn[i], l_exon)
-			
-			n = n + l_exon
 		}
 	}
 	
@@ -255,289 +267,171 @@ GTF$methods(exons = function() {
 	        ranges = IRanges(start = start,
 			                 end = end),
 			strand = Rle(strand),
-			mcols = DataFrame(score = value, id = id, type = tt, gene_name = gn, gene_id = gi))
+			exon_id = id, 
+			transcript_id = ti,
+			transcript_type = tt,
+			gene_id = gi,
+			gene_name = gn)
 	names(gr) = id
 	return(gr)
 })
 
-GTF$methods(introns = function() {
-
+GTF$methods(CDS = function() {
+	
+	n_tx = sum(sapply(.self$gtf, function(x) {
+		length(x$transcript)
+	}))
+	
+	n_exon = sum(sapply(.self$gtf, function(x) {
+		sum(sapply(x$transcript, function(tr) length(tr$exon)))
+	}))
+		
+	chr = character(n_exon)
+	start = integer(n_exon)
+	end = integer(n_exon)
+	id = character(n_exon)
+	value = integer(n_exon)
+	strand = character(n_exon)
+	
+	gi = character(n_exon)
+	gn = character(n_exon)
+	
+	ti = character(n_exon)
+	tt = character(n_exon)
+	
+	all_gi = names(.self$gtf)
+	all_gn = sapply(.self$gtf, function(x) x$name)
+	
+	n = 0
+	for(i in seq_along(all_gi)) {
+		tx = .self$gtf[[i]]$transcript
+		tii = names(tx)
+		
+		for(k in seq_along(tx)) {
+			exon = tx[[k]]$CDS
+			l_exon = length(exon)
+			if(l_exon) {
+				chr[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$chr, l_exon)
+				start[n + seq_len(l_exon)] = sapply(exon, function(x) x$start)
+				end[n + seq_len(l_exon)] = sapply(exon, function(x) x$end)
+				if(.self$gtf[[i]]$strand == "+") {
+					id[n + seq_len(l_exon)] = paste(tii[k], k, seq_len(l_exon), sep = "_")
+				} else {
+					id[n + seq_len(l_exon)] = paste(tii[k], k, rev(seq_len(l_exon)), sep = "_")
+				}
+				strand[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$strand, l_exon)
+				ti[n+seq_len(l_exon)] = rep(tii[k], l_exon)
+				tt[n+seq_len(l_exon)] = rep(tx[[k]]$type, l_exon)
+				gi[n+seq_len(l_exon)] = rep(all_gi[i], l_exon)
+				gn[n+seq_len(l_exon)] = rep(all_gn[i], l_exon)
+				
+				n = n + l_exon
+			}
+		}
+	}
+	
+	gr = GRanges(seqnames = Rle(chr),
+	        ranges = IRanges(start = start,
+			                 end = end),
+			strand = Rle(strand),
+			CDS_id = id, 
+			transcript_id = ti,
+			transcript_type = tt,
+			gene_id = gi,
+			gene_name = gn)
+	names(gr) = id
+	return(gr)
 })
 
+# introns = transcript - exons
+GTF$methods(introns = function() {
+	
+	n_tx = sum(sapply(.self$gtf, function(x) {
+		length(x$transcript)
+	}))
+	
+	n_exon = sum(sapply(.self$gtf, function(x) {
+		sum(sapply(x$transcript, function(tr) length(tr$exon)))
+	}))
+	
+	n_intron = n_tx + n_exon
+		
+	chr = character(n_intron)
+	start = integer(n_intron)
+	end = integer(n_intron)
+	id = character(n_intron)
+	value = integer(n_intron)
+	strand = character(n_intron)
+	
+	gi = character(n_intron)
+	gn = character(n_intron)
+	
+	ti = character(n_intron)
+	tt = character(n_intron)
+	
+	all_gi = names(.self$gtf)
+	all_gn = sapply(.self$gtf, function(x) x$name)
+	
+	n = 0
+	for(i in seq_along(all_gi)) {
+		tx = .self$gtf[[i]]$transcript
+		tii = names(tx)
+		
+		for(k in seq_along(tx)) {
+			tx_ir = IRangs(start = tx[[k]]$start, end = tx[[k]]$end)
+			exon = tx[[k]]$exon
+			l_exon = length(exon)
+			if(l_exon) {
+				exon_ir = IRanges(start = sapply(exon, function(x) x$start),
+				                  end = sapply(exon, function(x) x$end))
+				intron_ir = setdiff(tx_ir, exon_ir)
+				
+			} else {
+				intron_ir = tx_ir
+			}
+			
+			l_intron = length(intron_ir)
+			if(l_intron) {
+				chr[n + seq_len(l_intron)] = rep(.self$gtf[[i]]$chr, l_exon)
+				start[n + seq_len(l_intron)] = start(intron_ir)
+				end[n + seq_len(l_intron)] = end(intron_ir)
+				if(.self$gtf[[i]]$strand == "+") {
+					id[n + seq_len(l_intron)] = paste(tii[k], k, seq_len(l_intron), sep = "_")
+				} else {
+					id[n + seq_len(l_intron)] = paste(tii[k], k, rev(seq_len(l_intron)), sep = "_")
+				}
+				strand[n + seq_len(l_intron)] = rep(.self$gtf[[i]]$strand, l_exon)
+				ti[n+seq_len(l_intron)] = rep(tii[k], l_intron)
+				tt[n+seq_len(l_intron)] = rep(tx[[k]]$type, l_intron)
+				gi[n+seq_len(l_intron)] = rep(all_gi[i], l_intron)
+				gn[n+seq_len(l_intron)] = rep(all_gn[i], l_intron)
+				
+				n = n + l_intron
+			}
+		}
+	}
+	
+	gr = GRanges(seqnames = Rle(chr),
+	        ranges = IRanges(start = start,
+			                 end = end),
+			strand = Rle(strand),
+			intron_id = id, 
+			transcript_id = ti,
+			transcript_type = tt,
+			gene_id = gi,
+			gene_name = gn)
+	names(gr) = id
+	return(gr)
+})
+
+# exon - CDS, last one
 GTF$methods(threeUTRs = function() {
 
 })
 
-GTF$methods(fiveUTRs = funcitons() {
+# exon - CDS, first one
+GTF$methods(fiveUTRs = function() {
 
-})
-
-
-
-GTF$methods(toBed = function(file = NULL, category = c("gene", "exon", "transcript", "tss", "upstream", "downstream"), 
-	extend = 2000, type = NULL) {
-	"convert and write to BED file. If gtf is merged, or if gtf is not merged and category == 'gene', possible values for 'type' should be in 'pseudogene', 'lincRNA', 'protein_coding', 'antisense', 'processed_transcript', 'snRNA', 'sense_intronic', 'miRNA', 'misc_RNA', 'snoRNA', 'rRNA', 'polymorphic_pseudogene', 'sense_overlapping', '3prime_overlapping_ncrna', 'IG_V_gene', 'IG_C_gene', 'IG_J_gene', 'IG_V_pseudogene', 'TR_C_gene', 'TR_J_gene', 'TR_V_gene', 'TR_V_pseudogene', 'IG_C_pseudogene', 'TR_D_gene', 'TR_J_pseudogene', 'IG_J_pseudogene', 'IG_D_gene', 'Mt_tRNA', 'Mt_rRNA', if 'gtf' is not merged, and 'category' is not equal to `gene`, possible values for type should be in 'processed_transcript', 'unprocessed_pseudogene', 'transcribed_unprocessed_pseudogene', 'lincRNA', 'protein_coding', 'processed_pseudogene', 'antisense', 'snRNA', 'pseudogene', 'retained_intron', 'nonsense_mediated_decay', 'sense_intronic', 'miRNA', 'misc_RNA', 'transcribed_processed_pseudogene', 'snoRNA', 'non_stop_decay', 'rRNA', 'unitary_pseudogene', 'polymorphic_pseudogene', 'sense_overlapping', 'TEC', '3prime_overlapping_ncrna', 'IG_V_gene', 'IG_C_gene', 'IG_J_gene', 'IG_V_pseudogene', 'TR_C_gene', 'TR_J_gene', 'TR_V_gene', 'TR_V_pseudogene', 'IG_C_pseudogene', 'TR_D_gene', 'TR_J_pseudogene', 'IG_J_pseudogene', 'IG_D_gene', 'Mt_tRNA', 'Mt_rRNA'"
-	
-	category = match.arg(category)
-
-	if(category == "gene") {
-		chr = sapply(.self$gtf, function(x) x$chr)
-		start = sapply(.self$gtf, function(x) x$start)
-		end = sapply(.self$gtf, function(x) x$end)
-		id = names(.self$gtf)
-		value = rep(0, length(id))
-		strand = sapply(.self$gtf, function(x) x$strand)
-		gt = sapply(.self$gtf, function(x) x$type)
-
-	} else if(category == "exon") {
-
-		n_exon = sum(sapply(.self$gtf, function(x) {
-			sum(sapply(x$transcript, function(tr) length(tr$exon)))
-		}))
-		qqcat("totally @{n_exon} exons\n")
-		chr = character(n_exon)
-		start = integer(n_exon)
-		end = integer(n_exon)
-		id = character(n_exon)
-		value = integer(n_exon)
-		strand = character(n_exon)
-		gt = character(n_exon)
-		gi = names(.self$gtf)
-		n = 0
-		for(i in seq_along(gi)) {
-			ti = names(.self$gtf[[i]]$transcript)
-			for(k in seq_along(.self$gtf[[i]]$transcript)) {
-				exon = .self$gtf[[i]]$transcript[[k]]$exon
-				l_exon = length(exon)
-				chr[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$chr, l_exon)
-				start[n + seq_len(l_exon)] = sapply(exon, function(x) x$start)
-				end[n + seq_len(l_exon)] = sapply(exon, function(x) x$end)
-				id[n + seq_len(l_exon)] = paste(ti[i], k, seq_along(exon), sep = "_")
-				strand[n + seq_len(l_exon)] = rep(.self$gtf[[i]]$strand, l_exon)
-				gt[n+seq_len(l_exon)] = rep(.self$gtf[[i]]$type, l_exon)
-				n = n + l_exon
-			}
-			
-			if(i %% 500 == 0) {
-				qqcat("@{i}/@{length(gi)} genes finished\n")
-			}
-		}
-
-		value = rep(0, length(id))
-		
-	} else if(category == "intron") {
-
-		n_intron = sum(sapply(.self$gtf, function(x) {
-			sum(sapply(x$transcript, function(tr) length(tr$exon)+1))
-		}))
-		qqcat("around @{n_intron} introns\n")
-		chr = character(n_intron)
-		start = integer(n_intron)
-		end = integer(n_intron)
-		id = character(n_intron)
-		value = integer(n_intron)
-		strand = character(n_intron)
-		gt = character(n_intron)
-		gi = names(.self$gtf)
-		n = 0
-		for(i in seq_along(gi)) {
-			ti = names(.self$gtf[[i]]$transcript)
-			for(k in seq_along(.self$gtf[[i]]$transcript)) {
-				exon = .self$gtf[[i]]$transcript[[k]]$exon
-				ir_exon = IRanges(sapply(exon, function(x) x$start), sapply(exon, function(x) x$end))
-				ir_tx = IRanges(.self$gtf[[i]]$transcript[[k]]$start, .self$gtf[[i]]$transcript[[k]]$end)
-				ir_intron = setdiff(ir_tx, ir_exon)
-				intron = as.data.frame(ir_intron)
-				
-				l_intron = length(ir_intron)
-				if(l_intron) {
-					chr[n + seq_len(l_intron)] = rep(.self$gtf[[i]]$chr, l_intron)
-					start[n + seq_len(l_intron)] = intron[, 1]
-					end[n + seq_len(l_intron)] = intron[, 2]
-					id[n + seq_len(l_intron)] = paste(ti[i], k, seq_len(nrow(intron)), sep = "_")
-					strand[n + seq_len(l_intron)] = rep(.self$gtf[[i]]$strand, l_intron)
-					gt[n+seq_len(l_intron)] = rep(.self$gtf[[i]]$type, l_intron)
-					n = n + l_intron
-				}
-			}
-			
-			if(i %% 500 == 0) {
-				qqcat("@{i}/@{length(gi)} genes finished\n")
-			}
-		}
-
-		value = rep(0, length(id))
-		
-	} else if(category %in% c("3utr", "5utr")) {
-
-		n_utr = sum(sapply(.self$gtf, function(x) {
-			length(x$transcript)
-		}))
-
-		qqcat("around @{n_utr} @{category}s\n")
-		chr = character(n_utr)
-		start = integer(n_utr)
-		end = integer(n_utr)
-		id = character(n_utr)
-		value = integer(n_utr)
-		strand = character(n_utr)
-		gt = character(n_utr)
-		gi = names(.self$gtf)
-		n = 0
-		for(i in seq_along(gi)) {
-			ti = names(.self$gtf[[i]]$transcript)
-			for(k in seq_along(.self$gtf[[i]]$transcript)) {
-				if(length(.self$gtf[[i]]$transcript[[k]]$CDS)) {
-					
-					exon = .self$gtf[[i]]$transcript[[k]]$exon
-					CDS = .self$gtf[[i]]$transcript[[k]]$CDS
-					ir_exon = sort(IRanges(sapply(exon, function(x) x$start), sapply(exon, function(x) x$end)))
-					ir_CDS = sort(IRanges(sapply(CDS, function(x) x$start), sapply(exon, function(x) x$end)))
-					df_exon = as.data.frame(ir_exon)
-					
-					ir_utr = setdiff(ir_exon, ir_CDS)
-					utr = as.data.frame(ir_utr)
-					
-					flag = 0
-					if(.self$gtf[[i]]$strand == "+") {
-						if(category == "3utr" && utr[nrow(utr), 2] == df_exon[nrow(df_exon), 2]) {
-							pos_start = utr[nrow(utr), 1]
-							pos_end = utr[nrow(utr), 2]
-							flag = 1
-						} else if(category == "5utr" && utr[1, 1] == df_exon[1, 1]) {
-							pos_start = utr[1, 1]
-							pos_end = utr[1, 2]
-							flag = 1
-						}
-					} else {
-						if(category == "3utr" && utr[1, 1] == df_exon[1, 1]) {
-							pos_start = utr[1, 1]
-							pos_end = utr[1, 2]
-							flag = 1
-						} else if(category == "5utr" && utr[nrow(utr), 2] == df_exon[nrow(df_exon), 2]) {
-							pos_start = utr[nrow(utr), 1]
-							pos_end = utr[nrow(utr), 2]
-							flag = 1
-						}
-					}
-					
-					if(flag) {
-						chr[n + 1] = .self$gtf[[i]]$chr
-						start[n + 1] = pos_start
-						end[n + 1] = pos_end
-						id[n + 1] = ti[k]
-						strand[n + 1] = .self$gtf[[i]]$strand
-						gt[n + 1] = .self$gtf[[i]]$type
-						n = n + 1
-					}
-				}
-			}
-			
-			if(i %% 500 == 0) {
-				qqcat("\r")
-				qqcat("@{i}/@{length(gi)} genes finished           \n")
-				flush.console()
-			}
-		}
-
-		value = rep(0, length(id))
-		
-	} else if(category %in% c("transcript", "tss", "upstream", "downstream")) {
-
-		n_tss = sum(sapply(.self$gtf, function(x) {
-			length(x$transcript)
-		}))
-
-		qqcat("totally @{n_tss} @{category}s\n")
-		chr = character(n_tss)
-		start = integer(n_tss)
-		end = integer(n_tss)
-		id = character(n_tss)
-		value = integer(n_tss)
-		strand = character(n_tss)
-		gt = character(n_tss)
-		gi = names(.self$gtf)
-		n = 0
-		for(i in seq_along(gi)) {
-			ti = names(.self$gtf[[i]]$transcript)
-			for(k in seq_along(.self$gtf[[i]]$transcript)) {
-				transcript_start = .self$gtf[[i]]$transcript[[k]]$start
-				transcript_end = .self$gtf[[i]]$transcript[[k]]$end
-				
-				if(.self$gtf[[i]]$strand == "+") {
-					if(category == "tss") {
-						pos_start = transcript_start
-						pos_end = transcript_start
-					} else if(category == "upstream") {
-						pos_start = transcript_start - 1 - extend + 1
-						pos_end = transcript_start - 1
-					} else if(category == "downstream") {
-						pos_start = transcript_end + 1
-						pos_end = transcript_end + 1 + extend - 1
-					} else {
-						pos_start = transcript_start
-						pos_end = transcript_end
-					}
-				} else {
-					if(category == "tss") {
-						pos_start = transcript_end
-						pos_end = transcript_end
-					} else if(category == "upstream") {
-						pos_start = transcript_end + 1
-						pos_end = transcript_end + 1 + extend - 1
-					} else if(category == "downstream") {
-						pos_start = transcript_start - 1 - extend + 1
-						pos_end = transcript_start - 1
-					} else {
-						pos_start = transcript_start
-						pos_end = transcript_end
-					}
-				}
-				chr[n + 1] = .self$gtf[[i]]$chr
-				start[n + 1] = pos_start
-				end[n + 1] = pos_end
-				id[n + 1] = ti[k]
-				strand[n + 1] = .self$gtf[[i]]$strand
-				gt[n + 1] = .self$gtf[[i]]$type
-				n = n + 1
-			}
-			
-			if(i %% 500 == 0) {
-				qqcat("\r")
-				qqcat("@{i}/@{length(gi)} genes finished           \n")
-				flush.console()
-			}
-		}
-
-		value = rep(0, length(id))
-		
-	} 
-	
-	chr = chr[1:n]
-	start = start[1:n]
-	end = end[1:n]
-	id = id[1:n]
-	value = value[1:n]
-	strand = strand[1:n]
-	gt = gt[1:n]
-
-	start = as.integer(start) - 1  # bed file is 0-based
-	end = as.integer(end)
-	df = data.frame(chr = chr, start = start, end = end, name = id, value = value, strand = strand, type = gt, stringsAsFactors = FALSE)
-	df = subset(df, start <= end)
-	if(!is.null(type)) {
-		df = subset(df, type %in% gene_type)
-	}
-	df = df[order.bed(df), ]
-
-	rownames(df) = NULL
-
-	if(is.null(file)) {
-		return(df)
-	} else {
-		write.table(df, file = file, sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
-		return(invisible(.self))
-	}
 })
 
 

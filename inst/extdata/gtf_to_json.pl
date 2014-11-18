@@ -31,12 +31,20 @@
 
 
 use JSON;
+use Getopt::Long;
 use strict;
 
-my $gtf = read_gtf($ARGV[0]);
+my $input;
+my $output;
+GetOptions("input=s" => \$input,
+           "output=s" => \$output)
+or die("Error in command line arguments.\n");
 
-#print STDERR "writing to json...\n";
-print to_json($gtf, { pretty => 1 } );
+my $gtf = read_gtf($input);
+
+print STDERR "writing to json...\n";
+open OUT, ">$output";
+print OUT to_json($gtf, { pretty => 0 } );
 
 # note original order of genes or transcripts or exons will be disturbed.
 sub read_gtf {
@@ -45,7 +53,8 @@ sub read_gtf {
 	open my $fh, $file or die $!;
 	my $gtf;
 	my $exon_id;
-
+	
+	print STDERR "reading $file\n";
 	while(my $line = <$fh>) {
 		next if($line =~/^#/);
 		
@@ -122,10 +131,11 @@ sub read_gtf {
 		}
 		
 		if($. % 100000 == 0) {
-			#print STDERR "[serialize gtf] $. lines finished.\n";
+			print STDERR "[serialize gtf] $. lines finished.\n";
 		}
 	}
 	
+	print STDERR "validating GTF\n";
 	# test whether `gene` and `transcript` has start and end value...
 	foreach my $gene_id (keys %$gtf) {
 		my $min_transcript = 100000000000000;

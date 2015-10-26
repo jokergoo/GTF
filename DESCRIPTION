@@ -5,17 +5,11 @@ Version: 0.0.1
 Date: 2014-10-1
 Author: Zuguang Gu
 Maintainer: Zuguang Gu <z.gu@dkfz.de>
-Depends:
-    R (>= 2.10.0)
-Imports:
-    rjson,
-    GetoptLong,
-    IRanges,
-    methods,
-    parallel
+Depends: R (>= 2.10.0)
+Imports: rjson, GetoptLong, IRanges, methods, parallel
 Description: GTF class
 URL: https://github.com/jokergoo/GTF
 License: GPL (>= 2)
-Packaged: 2014-10-1 00:00:00 UTC; Administrator
+Packaged: 2014-10-23 12:08:00 UTC; guz
 Repository: CRAN
 Date/Publication: 2013-10-1 00:00:00

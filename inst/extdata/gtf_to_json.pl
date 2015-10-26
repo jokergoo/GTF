@@ -62,47 +62,30 @@ sub read_gtf {
 		my $gene_name = $tmp[8] =~/gene_name "(.*?)"/ ? $1 : $gene_id;
 		my $gene_type = $tmp[8] =~/gene_type "(.*?)"/ ? $1 : "Unknown";
 		
-		# the new entry of a 'gene' is not defined by 'gene' column but by the description column
 		if(!defined($gtf->{$gene_id})) {
-			
-			# create a new entry for this gene
-			$gtf->{$gene_id} = {strand => "",
-			                    name  => "",
-								type  => "",
-								start => 0,
-								end => 0,
-								chr => "",
+		
+			$gtf->{$gene_id} = {strand => $strand,
+			                    name  => $gene_name,
+								type  => $gene_type,
+								start => $start + 0,
+								end => $end + 0,
+								chr => $chr,
 								transcript => {},
 								};
 			$exon_id->{$gene_id} = {};
 		}
-		
-		# only add new value if there is gene column
-		if($type eq "gene") {
-			$gtf->{$gene_id}->{strand} = $strand;
-			$gtf->{$gene_id}->{name} = $gene_name;
-			$gtf->{$gene_id}->{type} = $gene_type;
-			$gtf->{$gene_id}->{start} = $start + 0;
-			$gtf->{$gene_id}->{end} = $end + 0;
-			$gtf->{$gene_id}->{chr} = $chr;
-		}
 
 		# because transcript_id in 'gene' is in fact gene_id
-		# create an entry for transcript
 		if($type ne "gene" and (! defined($gtf->{$gene_id}->{transcript}->{$transcript_id}))) {
 			$gtf->{$gene_id}->{transcript}->{$transcript_id} = {exon => {},
 			                                                    CDS => {},
-																start => 0,
-																end => 0,
+																start => $start + 0,
+																end => $end + 0,
 																type => $transcript_type,
 															};
 			$exon_id->{$gene_id}->{$transcript_id} = 0;										
 		}
-	
-		if($type eq "transcript") {
-			$gtf->{$gene_id}->{transcript}->{$transcript_id}->{start} = $start + 0;
-			$gtf->{$gene_id}->{transcript}->{$transcript_id}->{end} = $end + 0;
-		}
+
 
 		if($type eq "exon") {
 			my @tt = split "; ", $tmp[8];
@@ -138,24 +121,16 @@ sub read_gtf {
 				$min_exon = $min_exon < $gtf->{$gene_id}->{transcript}->{$transcript_id}->{exon}->{$exon}->{start} ? $min_exon : $gtf->{$gene_id}->{transcript}->{$transcript_id}->{exon}->{$exon}->{start};
 				$max_exon = $max_exon > $gtf->{$gene_id}->{transcript}->{$transcript_id}->{exon}->{$exon}->{end} ? $max_exon : $gtf->{$gene_id}->{transcript}->{$transcript_id}->{exon}->{$exon}->{end};
 			}
-			
-			if($gtf->{$gene_id}->{transcript}->{$transcript_id}->{start} == 0) {
-				$gtf->{$gene_id}->{transcript}->{$transcript_id}->{start} = $min_exon + 0;
-			}
-			if($gtf->{$gene_id}->{transcript}->{$transcript_id}->{end} == 0) {
-				$gtf->{$gene_id}->{transcript}->{$transcript_id}->{end} = $max_exon + 0;
-			}
+
+			$gtf->{$gene_id}->{transcript}->{$transcript_id}->{start} = $min_exon + 0;
+			$gtf->{$gene_id}->{transcript}->{$transcript_id}->{end} = $max_exon + 0;
 
 			$min_transcript = $min_transcript < $gtf->{$gene_id}->{transcript}->{$transcript_id}->{start} ? $min_transcript : $gtf->{$gene_id}->{transcript}->{$transcript_id}->{start};
 			$max_transcript = $max_transcript > $gtf->{$gene_id}->{transcript}->{$transcript_id}->{end} ? $max_transcript : $gtf->{$gene_id}->{transcript}->{$transcript_id}->{end};
 		}
-		
-		if($gtf->{$gene_id}->{start} == 0) {
-			$gtf->{$gene_id}->{start} = $min_transcript + 0;
-		}
-		if($gtf->{$gene_id}->{end} == 0) {
-			$gtf->{$gene_id}->{end} = $max_transcript + 0;
-		}
+
+		$gtf->{$gene_id}->{start} = $min_transcript + 0;
+		$gtf->{$gene_id}->{end} = $max_transcript + 0;
 	}
 
 	return $gtf;
